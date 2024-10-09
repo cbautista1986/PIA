@@ -1,0 +1,106 @@
+# Verificar si PowerShell se ejecuta como Administrador
+function Test-Administrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    $adminRole = [Security.Principal.WindowsBuiltInRole]::Administrator
+    if (-not $principal.IsInRole($adminRole)) {
+        Write-Error "Este script debe ejecutarse como Administrador. Ejecuta PowerShell como Administrador e inténtalo de nuevo."
+        exit 1
+    }
+}
+
+# Verificar conexión a Internet
+function Test-InternetConnection {
+    try {
+        $url = "https://www.google.com"
+        $request = [System.Net.WebRequest]::Create($url)
+        $request.Timeout = 5000
+        $response = $request.GetResponse()
+        $response.Close()
+        Write-Host "Conexión a Internet detectada"
+    } catch {
+        Write-Error "No hay conexión a Internet. Por favor, verifica tu conexión y vuelve a intentarlo."
+        exit 1
+    }
+}
+
+# Verificar y actualizar versión de PowerShell
+function Update-PowerShell {
+    $currentVersion = $PSVersionTable.PSVersion
+    if ($currentVersion.Major -lt 7) {
+        Write-Host "Actualizando PowerShell a la versión 7 o superior..."
+        Invoke-Expression "& { $(Invoke-RestMethod https://aka.ms/install-powershell.ps1) } -UseMSI"
+    } else {
+        Write-Host "La versión de PowerShell está actualizada: $currentVersion"
+    }
+}
+
+# Instalar o actualizar Chocolatey
+function Install-Update-Chocolatey {
+    if (!(Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+        Write-Host "Instalando Chocolatey..."
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+    } else {
+        Write-Host "Chocolatey ya está instalado. Actualizando..."
+        choco upgrade chocolatey -y
+    }
+}
+
+# Instalar o actualizar programas con Chocolatey
+function Install-Programs {
+    $programs = @(
+        "winrar",
+        "7zip",
+        "googlechrome",
+        "anydesk",
+        "crystaldiskinfo",
+        "hwinfo",
+        "hwmonitor",
+        "malwarebytes",
+        "foxitreader",  # Foxit Reader
+        "bulk-crap-uninstaller",  # Bulk Crap Uninstaller
+        "protonvpn",
+        "vlc"
+    )
+
+    foreach ($program in $programs) {
+        try {
+            $installedPackage = choco list --local-only | Select-String $program
+            if ($installedPackage) {
+                Write-Host "$program ya está instalado, verificando actualizaciones..."
+                choco upgrade $program -y
+            } else {
+                Write-Host "Instalando $program..."
+                choco install $program -y
+            }
+        } catch {
+            $errorMessage = $_.Exception.Message  # Se obtiene el mensaje de la excepción
+            Write-Error "Error al instalar/actualizar $program: ${errorMessage}"  # Uso de ${} para evitar el error
+        }
+    }
+}
+
+# Actualizar Microsoft Store o repararlo si es necesario
+function Repair-Update-MicrosoftStore {
+    $storePackage = Get-AppxPackage -AllUsers Microsoft.WindowsStore
+    if ($storePackage) {
+        Write-Host "Microsoft Store encontrado, reparando y actualizando..."
+        Get-AppxPackage -AllUsers Microsoft.WindowsStore | ForEach-Object { $_.PackageFullName } | ForEach-Object {
+            Add-AppxPackage -DisableDevelopmentMode -Register "C:\Program Files\WindowsApps\$_\AppxManifest.xml"
+        }
+    } else {
+        Write-Host "Microsoft Store no encontrado, omitiendo..."
+    }
+}
+
+# Ejecutar todas las funciones en orden
+Test-Administrator
+Test-InternetConnection
+Update-PowerShell
+Install-Update-Chocolatey
+Install-Programs
+Repair-Update-MicrosoftStore
+
+Write-Host "Todas las tareas han sido completadas con éxito."
