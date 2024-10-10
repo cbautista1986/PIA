@@ -29,9 +29,31 @@ function Update-PowerShell {
     $currentVersion = $PSVersionTable.PSVersion
     if ($currentVersion.Major -lt 7) {
         Write-Host "Actualizando PowerShell a la versión 7 o superior..."
-        Invoke-Expression "& { $(Invoke-RestMethod https://aka.ms/install-powershell.ps1) } -UseMSI"
+        $installerUrl = "https://aka.ms/win32-x64/powershell-7.4.0-win-x64.msi" # Cambia a la versión que deseas
+        $outputPath = "$env:TEMP\PowerShell-Installer.msi"
+
+        # Descargar el instalador
+        Invoke-WebRequest -Uri $installerUrl -OutFile $outputPath
+
+        # Instalar PowerShell de manera silenciosa
+        Start-Process -FilePath msiexec.exe -ArgumentList "/i `"$outputPath`" /quiet /norestart" -Wait
+        
+        # Limpiar el archivo de instalación
+        Remove-Item $outputPath -Force
     } else {
         Write-Host "La versión de PowerShell está actualizada: $currentVersion"
+    }
+}
+
+# Instalar .NET Framework 3.5
+function Install-DotNet35 {
+    try {
+        # Habilitar .NET Framework 3.5 sin instalación silenciosa
+        Write-Host "Instalando .NET Framework 3.5..."
+        Start-Process -FilePath "DISM" -ArgumentList "/Online", "/Enable-Feature", "/FeatureName:NetFx3", "/All" -Wait
+        Write-Host ".NET Framework 3.5 se ha instalado correctamente."
+    } catch {
+        Write-Error "Error al instalar .NET Framework 3.5: $_"
     }
 }
 
@@ -59,10 +81,10 @@ function Install-Programs {
         "hwinfo",
         "hwmonitor",
         "malwarebytes",
-        "foxitreader",  # Foxit Reader
-        "bulk-crap-uninstaller",  # Bulk Crap Uninstaller
-        "protonvpn",
-        "vlc"
+        "sumatrapdf",              
+        "bulk-crap-uninstaller",    
+        "vlc",
+        "driverbooster"             
     )
 
     foreach ($program in $programs) {
@@ -77,18 +99,18 @@ function Install-Programs {
             }
         } catch {
             $errorMessage = $_.Exception.Message  # Se obtiene el mensaje de la excepción
-            Write-Error "Error al instalar/actualizar $program: ${errorMessage}"  # Uso de ${} para evitar el error
+            Write-Error "Error al instalar/actualizar ${program}: ${errorMessage}"  # Uso correcto de la variable
         }
     }
 }
 
 # Actualizar Microsoft Store o repararlo si es necesario
 function Repair-Update-MicrosoftStore {
-    $storePackage = Get-AppxPackage -AllUsers Microsoft.WindowsStore
+    $storePackage = Get-AppxPackage -AllUsers Microsoft.WindowsStore -ErrorAction SilentlyContinue
     if ($storePackage) {
         Write-Host "Microsoft Store encontrado, reparando y actualizando..."
-        Get-AppxPackage -AllUsers Microsoft.WindowsStore | ForEach-Object { $_.PackageFullName } | ForEach-Object {
-            Add-AppxPackage -DisableDevelopmentMode -Register "C:\Program Files\WindowsApps\$_\AppxManifest.xml"
+        foreach ($package in $storePackage) {
+            Add-AppxPackage -DisableDevelopmentMode -Register "$($package.InstallLocation)\AppxManifest.xml"
         }
     } else {
         Write-Host "Microsoft Store no encontrado, omitiendo..."
@@ -100,6 +122,7 @@ Test-Administrator
 Test-InternetConnection
 Update-PowerShell
 Install-Update-Chocolatey
+Install-DotNet35  # Llamada a la función para instalar .NET Framework 3.5 sin modo silencioso
 Install-Programs
 Repair-Update-MicrosoftStore
 
