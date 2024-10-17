@@ -29,7 +29,7 @@ function Update-PowerShell {
     $currentVersion = $PSVersionTable.PSVersion
     if ($currentVersion.Major -lt 7) {
         Write-Host "Actualizando PowerShell a la versión 7 o superior..."
-        $installerUrl = "https://aka.ms/win32-x64/powershell-7.4.0-win-x64.msi" # Cambia a la versión que deseas
+        $installerUrl = "https://aka.ms/win32-x64/powershell-7.4.0-win-x64.msi"
         $outputPath = "$env:TEMP\PowerShell-Installer.msi"
 
         # Descargar el instalador
@@ -48,7 +48,6 @@ function Update-PowerShell {
 # Instalar .NET Framework 3.5
 function Install-DotNet35 {
     try {
-        # Habilitar .NET Framework 3.5 sin instalación silenciosa
         Write-Host "Instalando .NET Framework 3.5..."
         Start-Process -FilePath "DISM" -ArgumentList "/Online", "/Enable-Feature", "/FeatureName:NetFx3", "/All" -Wait
         Write-Host ".NET Framework 3.5 se ha instalado correctamente."
@@ -75,31 +74,44 @@ function Install-Programs {
     $programs = @(
         "winrar",
         "7zip",
-        "googlechrome",
-        "anydesk",
+        "opera",
         "crystaldiskinfo",
         "hwinfo",
         "hwmonitor",
         "malwarebytes",
-        "sumatrapdf",              
-        "bulk-crap-uninstaller",    
+        "sumatrapdf",
+        "bulk-crap-uninstaller",
         "vlc",
-        "driverbooster"             
+        "driverbooster",
+        "anydesk.install"  # Asegura la instalación correcta de AnyDesk
     )
+    
+    $totalPrograms = $programs.Count
+    $currentProgram = 0
 
     foreach ($program in $programs) {
-        try {
-            $installedPackage = choco list --local-only | Select-String $program
-            if ($installedPackage) {
-                Write-Host "$program ya está instalado, verificando actualizaciones..."
-                choco upgrade $program -y
-            } else {
-                Write-Host "Instalando $program..."
-                choco install $program -y
+        $attempt = 0
+        $currentProgram++
+        Write-Progress -Activity "Instalando programas..." -Status "$program" -PercentComplete (($currentProgram / $totalPrograms) * 100)
+        
+        while ($attempt -lt 3) {
+            try {
+                $attempt++
+                $installedPackage = choco list --local-only | Select-String $program
+                if ($installedPackage) {
+                    Write-Host "$program ya está instalado, verificando actualizaciones..."
+                    choco upgrade $program --force --force-dependencies -y
+                } else {
+                    Write-Host "Instalando $program..."
+                    choco install $program --force --force-dependencies -y
+                }
+                break
+            } catch {
+                Write-Warning "Error al intentar instalar/actualizar ${program}, reintentando ($attempt/3)..."
+                if ($attempt -eq 3) {
+                    Write-Error "Falló la instalación de $program después de 3 intentos: $_"
+                }
             }
-        } catch {
-            $errorMessage = $_.Exception.Message  # Se obtiene el mensaje de la excepción
-            Write-Error "Error al instalar/actualizar ${program}: ${errorMessage}"  # Uso correcto de la variable
         }
     }
 }
@@ -122,7 +134,7 @@ Test-Administrator
 Test-InternetConnection
 Update-PowerShell
 Install-Update-Chocolatey
-Install-DotNet35  # Llamada a la función para instalar .NET Framework 3.5 sin modo silencioso
+Install-DotNet35
 Install-Programs
 Repair-Update-MicrosoftStore
 
